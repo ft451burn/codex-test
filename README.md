@@ -14,3 +14,6 @@ This is a simple React todo app that runs entirely in your browser.
    Then visit the shown URL (e.g. http://localhost:8000).
 
 The app keeps a unique user ID in `localStorage` and stores your todos in IndexedDB. Drag images onto the content area to embed them.
+
+Open `index.html` in your browser to run the app. A UUID is saved in `localStorage` to keep user-specific data. Todo items are stored in IndexedDB. You can drag and drop images into the content field.
+
