@@ -7,14 +7,10 @@
   <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; padding: 1rem; }
-    .todo { border: 1px solid #ccc; padding: 0.5rem; margin-bottom: 0.5rem; }
-    .todo img { max-width: 100px; display: block; margin-top: 0.5rem; }
-  </style>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <div id="app"></div>
+<body class="bg-gray-100 min-h-screen p-4">
+  <div id="app" class="max-w-xl mx-auto"></div>
   <script type="text/babel">
     const { useState, useEffect } = React;
 
@@ -33,6 +29,16 @@
       });
     }
 
+    function renderContent(text) {
+      const html = text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/!\[[^\]]*\]\((.*?)\)/g, '<img src="$1" class="max-w-full h-auto mt-2"/>')
+        .replace(/\n/g, '<br/>');
+      return <div dangerouslySetInnerHTML={{ __html: html }} />;
+    }
+
     function App() {
       const [db, setDb] = useState(null);
       const [todos, setTodos] = useState([]);
@@ -40,6 +46,7 @@
       const [content, setContent] = useState('');
       const [search, setSearch] = useState('');
       const [sort, setSort] = useState('new');
+      const [editingId, setEditingId] = useState(null);
       const userIdKey = 'todo-user-id';
 
       useEffect(() => {
@@ -61,21 +68,37 @@
         };
       }
 
-      function addTodo() {
-        const newTodo = { title, content, created: Date.now() };
+      function saveTodo() {
+        if (!title.trim()) return;
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
-        store.add(newTodo).onsuccess = () => {
-          setTitle('');
-          setContent('');
-          loadTodos(db);
-        };
+        if (editingId === null) {
+          const newTodo = { title, content, created: Date.now() };
+          store.add(newTodo).onsuccess = finishEdit;
+        } else {
+          const existing = todos.find(t => t.id === editingId);
+          const updated = { id: editingId, title, content, created: existing.created };
+          store.put(updated).onsuccess = finishEdit;
+        }
+      }
+
+      function finishEdit() {
+        setTitle('');
+        setContent('');
+        setEditingId(null);
+        loadTodos(db);
       }
 
       function deleteTodo(id) {
         const tx = db.transaction(STORE_NAME, 'readwrite');
         const store = tx.objectStore(STORE_NAME);
         store.delete(id).onsuccess = () => loadTodos(db);
+      }
+
+      function editTodo(todo) {
+        setTitle(todo.title);
+        setContent(todo.content);
+        setEditingId(todo.id);
       }
 
       function handleDrop(e) {
@@ -87,8 +110,7 @@
           reader.readAsDataURL(file);
         }
       }
-
-      function handleDragOver(e) { e.preventDefault(); }
+      const handleDragOver = e => e.preventDefault();
 
       const filtered = todos
         .filter(t => t.title.toLowerCase().includes(search.toLowerCase()))
@@ -98,27 +120,34 @@
         });
 
       return (
-        <div>
-          <h1>Todo</h1>
-          <div>
-            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="title" />
-            <textarea value={content} onChange={e => setContent(e.target.value)}
-              onDrop={handleDrop} onDragOver={handleDragOver} placeholder="content (drop image here)"></textarea>
-            <button onClick={addTodo}>Add</button>
+        <div className="space-y-4">
+          <h1 className="text-2xl font-bold text-center">Todo</h1>
+          <div className="bg-white rounded shadow p-4 space-y-2">
+            <input className="border rounded w-full p-2" value={title} onChange={e => setTitle(e.target.value)} placeholder="title" />
+            <textarea className="border rounded w-full p-2" value={content} onChange={e => setContent(e.target.value)} onDrop={handleDrop} onDragOver={handleDragOver} placeholder="content (drop image here)"></textarea>
+            <button className="bg-blue-500 text-white px-4 py-2 rounded" onClick={saveTodo}>{editingId === null ? 'Add' : 'Save'}</button>
+            {editingId !== null && (
+              <button className="ml-2 text-sm" onClick={() => { setTitle(''); setContent(''); setEditingId(null); }}>Cancel</button>
+            )}
           </div>
-          <div>
-            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="search" />
-            <select value={sort} onChange={e => setSort(e.target.value)}>
+          <div className="flex gap-2">
+            <input className="border rounded flex-grow p-2" value={search} onChange={e => setSearch(e.target.value)} placeholder="search" />
+            <select className="border rounded p-2" value={sort} onChange={e => setSort(e.target.value)}>
               <option value="new">Newest</option>
               <option value="title">Title</option>
             </select>
           </div>
-          <div>
+          <div className="space-y-2">
             {filtered.map(todo => (
-              <div key={todo.id} className="todo">
-                <strong>{todo.title}</strong>
-                <div>{todo.content}</div>
-                <button onClick={() => deleteTodo(todo.id)}>Delete</button>
+              <div key={todo.id} className="bg-white rounded shadow p-4 space-y-2">
+                <div className="flex justify-between items-center">
+                  <strong className="text-lg">{todo.title}</strong>
+                  <div className="space-x-2">
+                    <button className="text-blue-500" onClick={() => editTodo(todo)}>Edit</button>
+                    <button className="text-red-500" onClick={() => deleteTodo(todo.id)}>Delete</button>
+                  </div>
+                </div>
+                {renderContent(todo.content)}
               </div>
             ))}
           </div>
