@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>React Todo</title>
+  <script src="https://unpkg.com/react@18/umd/react.development.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 1rem; }
+    .todo { border: 1px solid #ccc; padding: 0.5rem; margin-bottom: 0.5rem; }
+    .todo img { max-width: 100px; display: block; margin-top: 0.5rem; }
+  </style>
+</head>
+<body>
+  <div id="app"></div>
+  <script type="text/babel">
+    const { useState, useEffect } = React;
+
+    const DB_NAME = 'todo-app';
+    const STORE_NAME = 'todos';
+
+    function openDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open(DB_NAME, 1);
+        request.onupgradeneeded = (e) => {
+          const db = e.target.result;
+          db.createObjectStore(STORE_NAME, { keyPath: 'id', autoIncrement: true });
+        };
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function App() {
+      const [db, setDb] = useState(null);
+      const [todos, setTodos] = useState([]);
+      const [title, setTitle] = useState('');
+      const [content, setContent] = useState('');
+      const [search, setSearch] = useState('');
+      const [sort, setSort] = useState('new');
+      const userIdKey = 'todo-user-id';
+
+      useEffect(() => {
+        if (!localStorage.getItem(userIdKey)) {
+          localStorage.setItem(userIdKey, crypto.randomUUID());
+        }
+        openDb().then(db => {
+          setDb(db);
+          loadTodos(db);
+        });
+      }, []);
+
+      function loadTodos(db) {
+        const tx = db.transaction(STORE_NAME, 'readonly');
+        const store = tx.objectStore(STORE_NAME);
+        const request = store.getAll();
+        request.onsuccess = () => {
+          setTodos(request.result);
+        };
+      }
+
+      function addTodo() {
+        const newTodo = { title, content, created: Date.now() };
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.add(newTodo).onsuccess = () => {
+          setTitle('');
+          setContent('');
+          loadTodos(db);
+        };
+      }
+
+      function deleteTodo(id) {
+        const tx = db.transaction(STORE_NAME, 'readwrite');
+        const store = tx.objectStore(STORE_NAME);
+        store.delete(id).onsuccess = () => loadTodos(db);
+      }
+
+      function handleDrop(e) {
+        e.preventDefault();
+        const file = e.dataTransfer.files[0];
+        if (file && file.type.startsWith('image/')) {
+          const reader = new FileReader();
+          reader.onload = () => setContent(content + '\n![' + file.name + '](' + reader.result + ')');
+          reader.readAsDataURL(file);
+        }
+      }
+
+      function handleDragOver(e) { e.preventDefault(); }
+
+      const filtered = todos
+        .filter(t => t.title.toLowerCase().includes(search.toLowerCase()))
+        .sort((a, b) => {
+          if (sort === 'title') return a.title.localeCompare(b.title);
+          return b.created - a.created;
+        });
+
+      return (
+        <div>
+          <h1>Todo</h1>
+          <div>
+            <input value={title} onChange={e => setTitle(e.target.value)} placeholder="title" />
+            <textarea value={content} onChange={e => setContent(e.target.value)}
+              onDrop={handleDrop} onDragOver={handleDragOver} placeholder="content (drop image here)"></textarea>
+            <button onClick={addTodo}>Add</button>
+          </div>
+          <div>
+            <input value={search} onChange={e => setSearch(e.target.value)} placeholder="search" />
+            <select value={sort} onChange={e => setSort(e.target.value)}>
+              <option value="new">Newest</option>
+              <option value="title">Title</option>
+            </select>
+          </div>
+          <div>
+            {filtered.map(todo => (
+              <div key={todo.id} className="todo">
+                <strong>{todo.title}</strong>
+                <div>{todo.content}</div>
+                <button onClick={() => deleteTodo(todo.id)}>Delete</button>
+              </div>
+            ))}
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById('app')).render(<App />);
+  </script>
+</body>
+</html>
